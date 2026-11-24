@@ -38,6 +38,9 @@
 
     .log-card { background: #f9f9f9; padding: 12px; border-radius: 8px; margin-bottom: 10px; font-size: 13px; border-left: 4px solid #06C755; box-shadow: 0 1px 3px rgba(0,0,0,0.05); }
     .log-date { font-weight: bold; color: #06C755; font-size: 14px; margin-bottom: 4px; }
+    .log-actions { display: flex; gap: 8px; margin-top: 8px; }
+    .log-actions button { flex: 1; padding: 8px; border-radius: 6px; border: 1px solid #ccc; background: #fff; font-size: 13px; cursor: pointer; }
+    .log-actions .danger { color: #b00020; border-color: #e0a0a8; }
     .log-detail { color: #555; line-height: 1.4; word-break: break-word; }
     .empty { text-align: center; color: #888; font-size: 13px; }
   </style>
@@ -128,8 +131,10 @@
             <textarea id="memo" maxlength="200" placeholder="遅刻理由や連絡事項など"></textarea>
           </div>
 
+          <div id="editBanner" class="notice" hidden></div>
           <div id="formMessage" class="notice" hidden></div>
           <button type="submit" id="submitBtn" class="submit-btn">送信する</button>
+          <button type="button" id="cancelEditBtn" class="sub-btn" style="margin-top:10px;" hidden>修正をやめる</button>
         </form>
       </div>
 
@@ -150,8 +155,8 @@
     // 送信先はこのファイルに固定されます。URLのパラメータでは変更できません。
     // ============================================================
     const CONFIG = {
-      LIFF_ID: '2012775298-WnS81dFF',
-      GAS_URL: 'https://script.google.com/macros/s/AKfycbwmu7KDTJc7FmJY2XIX2w6W_IABGUz3rnrRBQ44vBh4ZuoHpbT8JM7RlF4DD_gTApWB/exec'
+      LIFF_ID: 'YOUR_LIFF_ID',
+      GAS_URL: 'https://script.google.com/macros/s/YOUR_DEPLOYMENT_ID/exec'
     };
 
     const $ = (id) => document.getElementById(id);
@@ -291,6 +296,57 @@
       try { await refreshStatus(); } catch (err) { /* 認証エラーは api() 側で表示済み */ }
     });
 
+    // ---------- 修正モード ----------
+    // editing = { date, start } のとき、送信は「修正」として扱う
+    let editing = null;
+
+    function startEdit(log) {
+      editing = { date: log.date, start: log.start };
+      $('work_date').value = log.date;
+      $('start_time').value = log.start;
+      $('end_time').value = log.end;
+      $('break_minutes').value = log.breakMinutes || 0;
+      $('is_special_wage1').checked = !!log.special1;
+      $('is_special_wage2').checked = !!log.special2;
+      $('expense_amount').value = log.expense || 0;
+      $('transport_cost').value = log.transport || 0;
+      $('memo').value = log.memo || '';
+      $('editBanner').textContent = '✏️ ' + log.date + ' ' + log.start + ' の記録を修正中です。直して「修正を保存する」を押してください。';
+      $('editBanner').hidden = false;
+      $('submitBtn').textContent = '修正を保存する';
+      $('cancelEditBtn').hidden = false;
+      showFormMessage('', '');
+      switchTab('inputTab');
+    }
+
+    function endEdit() {
+      editing = null;
+      $('editBanner').hidden = true;
+      $('submitBtn').textContent = '送信する';
+      $('cancelEditBtn').hidden = true;
+      $('attendanceForm').reset();
+      $('work_date').value = todayLocal();
+      $('break_minutes').value = 0;
+      $('expense_amount').value = 0;
+      $('transport_cost').value = 0;
+    }
+
+    $('cancelEditBtn').addEventListener('click', endEdit);
+
+    async function deleteLog(log) {
+      if (!confirm(log.date + ' ' + log.start + ' 〜 ' + log.end + ' の記録を削除します。よろしいですか?')) return;
+      try {
+        const data = await api('delete', { work_date: log.date, start_time: log.start });
+        if (data.status === 'success') {
+          renderLogs(data.logs);
+        } else {
+          alert(data.message || '削除に失敗しました。');
+        }
+      } catch (err) {
+        if (!(err instanceof AuthError)) alert('通信エラーが発生しました。もう一度お試しください。');
+      }
+    }
+
     // ---------- 勤怠送信 ----------
     $('attendanceForm').addEventListener('submit', async (e) => {
       e.preventDefault();
@@ -299,6 +355,7 @@
       const btn = $('submitBtn');
       btn.disabled = true;
       btn.textContent = '送信中...';
+      const wasEditing = editing;
 
       // 金額・時間の計算はすべてサーバー側で行う。ここでは入力値をそのまま送る
       const payload = {
@@ -314,8 +371,11 @@
       };
 
       try {
-        const data = await api('submit', payload);
+        const data = wasEditing
+          ? await api('edit', Object.assign({ orig_date: wasEditing.date, orig_start: wasEditing.start }, payload))
+          : await api('submit', payload);
         if (data.status === 'success') {
+          if (wasEditing) endEdit();
           showFormMessage(data.message, 'ok');
           renderLogs(data.logs);
           switchTab('logTab');
@@ -326,7 +386,7 @@
         if (!(err instanceof AuthError)) showFormMessage('通信エラーが発生しました。もう一度お試しください。', 'error');
       } finally {
         btn.disabled = false;
-        btn.textContent = '送信する';
+        btn.textContent = editing ? '修正を保存する' : '送信する';
       }
     });
 
@@ -377,6 +437,28 @@
           detail.appendChild(document.createTextNode('備考: ' + log.memo));
         }
         card.appendChild(detail);
+
+        if (log.editable) {
+          const actions = document.createElement('div');
+          actions.className = 'log-actions';
+          const editBtn = document.createElement('button');
+          editBtn.type = 'button';
+          editBtn.textContent = '修正';
+          editBtn.addEventListener('click', () => startEdit(log));
+          const delBtn = document.createElement('button');
+          delBtn.type = 'button';
+          delBtn.className = 'danger';
+          delBtn.textContent = '削除';
+          delBtn.addEventListener('click', () => deleteLog(log));
+          actions.appendChild(editBtn);
+          actions.appendChild(delBtn);
+          card.appendChild(actions);
+        } else {
+          const lock = document.createElement('div');
+          lock.className = 'hint';
+          lock.textContent = '🔒 修正できる期間を過ぎています。直す場合は管理者に連絡してください。';
+          card.appendChild(lock);
+        }
 
         container.appendChild(card);
       });
