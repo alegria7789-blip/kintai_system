@@ -1,0 +1,397 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>勤怠入力</title>
+  <!-- LINE LIFF SDK -->
+  <script charset="utf-8" src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
+  <style>
+    [hidden] { display: none !important; }
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; padding: 15px; background: #f4f5f7; margin: 0; }
+    .container { max-width: 400px; margin: 0 auto; background: #fff; padding: 20px; border-radius: 12px; box-shadow: 0 2px 10px rgba(0,0,0,0.08); }
+    h2 { margin: 0 0 12px; font-size: 18px; }
+
+    .notice { padding: 12px; border-radius: 8px; background: #f0f4ff; color: #334; font-size: 14px; line-height: 1.5; margin-bottom: 12px; }
+    .notice.error { background: #fff0f0; color: #b00020; }
+    .notice.ok { background: #effaf2; color: #146c2e; }
+    .hint { font-size: 12px; color: #777; margin: 4px 0 0; line-height: 1.4; }
+
+    .tab-header { display: flex; border-bottom: 2px solid #eee; margin-bottom: 20px; }
+    .tab-btn { flex: 1; padding: 12px; text-align: center; font-weight: bold; font-size: 14px; color: #888; background: none; border: none; cursor: pointer; border-bottom: 3px solid transparent; }
+    .tab-btn.active { color: #06C755; border-bottom-color: #06C755; }
+    .tab-content { display: none; }
+    .tab-content.active { display: block; }
+
+    .form-group { margin-bottom: 14px; }
+    label { display: block; font-weight: bold; margin-bottom: 4px; font-size: 13px; color: #444; }
+    input[type="text"], input[type="date"], input[type="time"], input[type="number"], textarea { width: 100%; padding: 10px; box-sizing: border-box; border: 1px solid #ccc; border-radius: 6px; font-size: 15px; font-family: inherit; }
+    textarea { resize: vertical; height: 50px; }
+
+    .checkbox-group { display: flex; align-items: center; cursor: pointer; user-select: none; padding: 6px 0; }
+    .checkbox-group input[type="checkbox"] { width: 20px; height: 20px; margin-right: 10px; accent-color: #06C755; cursor: pointer; }
+    .checkbox-group label { margin-bottom: 0; cursor: pointer; font-size: 14px; color: #333; }
+
+    .submit-btn { width: 100%; padding: 12px; background: #06C755; color: #fff; border: none; border-radius: 6px; font-size: 16px; font-weight: bold; cursor: pointer; margin-top: 10px; }
+    .submit-btn:disabled { background: #ccc; cursor: not-allowed; }
+    .sub-btn { width: 100%; padding: 10px; background: #555; color: #fff; border: none; border-radius: 6px; font-size: 14px; cursor: pointer; margin-bottom: 15px; }
+
+    .log-card { background: #f9f9f9; padding: 12px; border-radius: 8px; margin-bottom: 10px; font-size: 13px; border-left: 4px solid #06C755; box-shadow: 0 1px 3px rgba(0,0,0,0.05); }
+    .log-date { font-weight: bold; color: #06C755; font-size: 14px; margin-bottom: 4px; }
+    .log-detail { color: #555; line-height: 1.4; word-break: break-word; }
+    .empty { text-align: center; color: #888; font-size: 13px; }
+  </style>
+</head>
+<body>
+  <div class="container">
+
+    <div id="loading" class="notice">読み込み中...</div>
+    <div id="errorBox" class="notice error" hidden>
+      <div id="errorText"></div>
+      <button type="button" id="reloginBtn" class="sub-btn" style="margin:10px 0 0;" hidden>LINEで再ログイン</button>
+    </div>
+
+    <!-- 初回登録 -->
+    <section id="registerView" hidden>
+      <h2>初回登録</h2>
+      <p class="hint" style="margin-bottom:12px;">お名前(フルネーム)を入力してください。管理者の承認後に勤怠を入力できます。</p>
+      <form id="registerForm" autocomplete="off">
+        <div class="form-group">
+          <label for="staff_name">お名前（フルネーム）</label>
+          <input type="text" id="staff_name" maxlength="30" placeholder="例: 山田 太郎" autocomplete="off" required>
+        </div>
+        <button type="submit" id="registerBtn" class="submit-btn">登録する</button>
+      </form>
+    </section>
+
+    <!-- 承認待ち -->
+    <section id="pendingView" hidden>
+      <h2>承認待ち</h2>
+      <div class="notice">登録は完了しています。管理者の承認が済むと、勤怠を入力できるようになります。</div>
+      <button type="button" id="recheckBtn" class="sub-btn">承認状況を確認する</button>
+    </section>
+
+    <!-- メイン -->
+    <section id="mainView" hidden>
+      <div class="tab-header">
+        <button type="button" class="tab-btn active" id="tabInputBtn">勤怠入力</button>
+        <button type="button" class="tab-btn" id="tabLogBtn">打刻ログ確認</button>
+      </div>
+
+      <!-- 1. 勤怠入力 -->
+      <div id="inputTab" class="tab-content active">
+        <div id="staffLabel" class="hint" style="margin:-8px 0 12px; text-align:right;"></div>
+        <form id="attendanceForm" autocomplete="off">
+          <div class="form-group">
+            <label for="work_date">日付(出勤した日)</label>
+            <input type="date" id="work_date" required>
+          </div>
+
+          <div class="form-group">
+            <label for="start_time">出勤時間</label>
+            <input type="time" id="start_time" required>
+          </div>
+
+          <div class="form-group">
+            <label for="end_time">退勤時間</label>
+            <input type="time" id="end_time" required>
+            <p class="hint">日をまたぐ場合は、そのまま翌日の退勤時間を入れてください。(例: 22:00出勤 → 02:00退勤)</p>
+          </div>
+
+          <div class="form-group">
+            <label for="break_minutes">休憩時間 (分)</label>
+            <input type="number" id="break_minutes" value="0" min="0" max="600" step="1" inputmode="numeric" required>
+          </div>
+
+          <div class="form-group checkbox-group" id="group_special1" hidden>
+            <input type="checkbox" id="is_special_wage1">
+            <label for="is_special_wage1">特別時給①を適用する</label>
+          </div>
+
+          <div class="form-group checkbox-group" id="group_special2" hidden>
+            <input type="checkbox" id="is_special_wage2">
+            <label for="is_special_wage2">特別時給②を適用する</label>
+          </div>
+
+          <div class="form-group" id="group_expense" hidden>
+            <label for="expense_amount">立替金 (円)</label>
+            <input type="number" id="expense_amount" value="0" min="0" step="1" inputmode="numeric">
+          </div>
+
+          <div class="form-group" id="group_transport" hidden>
+            <label for="transport_cost">交通費 (円)</label>
+            <input type="number" id="transport_cost" value="0" min="0" step="1" inputmode="numeric">
+          </div>
+
+          <div class="form-group">
+            <label for="memo">備考欄</label>
+            <textarea id="memo" maxlength="200" placeholder="遅刻理由や連絡事項など"></textarea>
+          </div>
+
+          <div id="formMessage" class="notice" hidden></div>
+          <button type="submit" id="submitBtn" class="submit-btn">送信する</button>
+        </form>
+      </div>
+
+      <!-- 2. 打刻ログ確認 -->
+      <div id="logTab" class="tab-content">
+        <button type="button" class="sub-btn" id="reloadLogsBtn">最新ログを更新</button>
+        <div id="logsContainer"></div>
+      </div>
+    </section>
+
+  </div>
+
+  <script>
+    // ============================================================
+    // 設定(ここだけ書き換えてください)
+    //  - LIFF_ID : LINE Developers の LIFF ID
+    //  - GAS_URL : GAS ウェブアプリの URL(…/exec)
+    // 送信先はこのファイルに固定されます。URLのパラメータでは変更できません。
+    // ============================================================
+    const CONFIG = {
+      LIFF_ID: 'YOUR_LIFF_ID',
+      GAS_URL: 'https://script.google.com/macros/s/YOUR_DEPLOYMENT_ID/exec'
+    };
+
+    const $ = (id) => document.getElementById(id);
+
+    function configIsValid() {
+      if (CONFIG.LIFF_ID.indexOf('YOUR_') !== -1 || CONFIG.GAS_URL.indexOf('YOUR_') !== -1) return false;
+      return /^https:\/\/script\.google\.com\/(a\/[A-Za-z0-9.-]+\/)?macros\/s\/[A-Za-z0-9_-]+\/exec$/.test(CONFIG.GAS_URL);
+    }
+
+    // ---------- 表示切り替え ----------
+    function showOnly(viewId) {
+      ['loading', 'errorBox', 'registerView', 'pendingView', 'mainView'].forEach((id) => {
+        $(id).hidden = (id !== viewId);
+      });
+    }
+
+    function showError(message, withRelogin) {
+      $('errorText').textContent = message;
+      $('reloginBtn').hidden = !withRelogin;
+      showOnly('errorBox');
+    }
+
+    function showFormMessage(text, kind) {
+      const box = $('formMessage');
+      box.textContent = text;
+      box.className = 'notice' + (kind ? ' ' + kind : '');
+      box.hidden = !text;
+    }
+
+    function switchTab(tabId) {
+      const isInput = tabId === 'inputTab';
+      $('tabInputBtn').classList.toggle('active', isInput);
+      $('tabLogBtn').classList.toggle('active', !isInput);
+      $('inputTab').classList.toggle('active', isInput);
+      $('logTab').classList.toggle('active', !isInput);
+      if (!isInput) fetchLogs();
+    }
+
+    // ---------- API ----------
+    class AuthError extends Error {}
+
+    async function api(action, extra) {
+      const idToken = liff.getIDToken();
+      if (!idToken) throw new AuthError('NO_TOKEN');
+      const body = Object.assign({ action: action, idToken: idToken }, extra || {});
+      // text/plain にすることで、ブラウザの事前確認(プリフライト)を発生させない
+      const res = await fetch(CONFIG.GAS_URL, { method: 'POST', body: JSON.stringify(body) });
+      const data = await res.json();
+      if (data && data.code === 'AUTH') {
+        showError(data.message || 'LINEの認証が切れました。', true);
+        throw new AuthError('AUTH');
+      }
+      return data;
+    }
+
+    // ---------- 初期化 ----------
+    function todayLocal() {
+      // toISOString() は世界標準時のため、日本時間の0〜9時に前日になる。端末の現地時間で作る
+      const d = new Date();
+      const pad = (n) => String(n).padStart(2, '0');
+      return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate());
+    }
+
+    async function init() {
+      $('work_date').value = todayLocal();
+
+      if (!configIsValid()) {
+        showError('設定エラー: このファイルの CONFIG に、LIFF ID と GAS の URL を設定してください。', false);
+        return;
+      }
+
+      try {
+        await liff.init({ liffId: CONFIG.LIFF_ID });
+
+        if (!liff.isLoggedIn()) {
+          liff.login({ redirectUri: window.location.href });
+          return;
+        }
+        if (!liff.getIDToken()) {
+          showError('LINEの認証情報を取得できませんでした。LIFFアプリの設定で、スコープの「openid」が有効か確認してください。', false);
+          return;
+        }
+        await refreshStatus();
+      } catch (err) {
+        if (err instanceof AuthError) return;
+        console.error(err);
+        showError('読み込みに失敗しました。通信状況を確認して、画面を開き直してください。', false);
+      }
+    }
+
+    async function refreshStatus() {
+      const data = await api('status');
+      if (data.status !== 'success') {
+        showError(data.message || '状態の取得に失敗しました。', false);
+        return;
+      }
+
+      const f = data.features || {};
+      $('group_expense').hidden = !f.expense;
+      $('group_transport').hidden = !f.transport;
+      $('group_special1').hidden = !f.special1;
+      $('group_special2').hidden = !f.special2;
+
+      if (!data.registered) {
+        showOnly('registerView');
+      } else if (!data.active) {
+        showOnly('pendingView');
+      } else {
+        $('staffLabel').textContent = data.name ? (data.name + ' さん') : '';
+        showOnly('mainView');
+        fetchLogs();
+      }
+    }
+
+    // ---------- 初回登録 ----------
+    $('registerForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const btn = $('registerBtn');
+      btn.disabled = true;
+      btn.textContent = '登録中...';
+      try {
+        const data = await api('register', { staff_name: $('staff_name').value.trim() });
+        if (data.status === 'success') {
+          await refreshStatus();
+        } else {
+          alert(data.message || '登録に失敗しました。');
+        }
+      } catch (err) {
+        if (!(err instanceof AuthError)) alert('通信エラーが発生しました。もう一度お試しください。');
+      } finally {
+        btn.disabled = false;
+        btn.textContent = '登録する';
+      }
+    });
+
+    $('recheckBtn').addEventListener('click', async () => {
+      try { await refreshStatus(); } catch (err) { /* 認証エラーは api() 側で表示済み */ }
+    });
+
+    // ---------- 勤怠送信 ----------
+    $('attendanceForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      showFormMessage('', '');
+
+      const btn = $('submitBtn');
+      btn.disabled = true;
+      btn.textContent = '送信中...';
+
+      // 金額・時間の計算はすべてサーバー側で行う。ここでは入力値をそのまま送る
+      const payload = {
+        work_date: $('work_date').value,
+        start_time: $('start_time').value,
+        end_time: $('end_time').value,
+        break_minutes: Number($('break_minutes').value) || 0,
+        is_special_wage1: !$('group_special1').hidden && $('is_special_wage1').checked,
+        is_special_wage2: !$('group_special2').hidden && $('is_special_wage2').checked,
+        expense_amount: $('group_expense').hidden ? 0 : (Number($('expense_amount').value) || 0),
+        transport_cost: $('group_transport').hidden ? 0 : (Number($('transport_cost').value) || 0),
+        memo: $('memo').value || ''
+      };
+
+      try {
+        const data = await api('submit', payload);
+        if (data.status === 'success') {
+          showFormMessage(data.message, 'ok');
+          renderLogs(data.logs);
+          switchTab('logTab');
+        } else {
+          showFormMessage(data.message || '送信に失敗しました。', 'error');
+        }
+      } catch (err) {
+        if (!(err instanceof AuthError)) showFormMessage('通信エラーが発生しました。もう一度お試しください。', 'error');
+      } finally {
+        btn.disabled = false;
+        btn.textContent = '送信する';
+      }
+    });
+
+    // ---------- ログ ----------
+    async function fetchLogs() {
+      try {
+        const data = await api('get_logs');
+        if (data.status === 'success') renderLogs(data.logs);
+      } catch (err) {
+        if (err instanceof AuthError) return;
+        const container = $('logsContainer');
+        container.textContent = '';
+        const div = document.createElement('div');
+        div.className = 'empty';
+        div.style.color = 'red';
+        div.textContent = 'ログの取得に失敗しました';
+        container.appendChild(div);
+      }
+    }
+
+    // 画面に出す文字は textContent だけで組み立てる(HTMLとして解釈させない)
+    function renderLogs(logs) {
+      const container = $('logsContainer');
+      container.textContent = '';
+
+      if (!logs || logs.length === 0) {
+        const div = document.createElement('div');
+        div.className = 'empty';
+        div.textContent = '打刻履歴はありません';
+        container.appendChild(div);
+        return;
+      }
+
+      logs.forEach((log) => {
+        const card = document.createElement('div');
+        card.className = 'log-card';
+
+        const dateEl = document.createElement('div');
+        dateEl.className = 'log-date';
+        dateEl.textContent = '📅 ' + log.date;
+        card.appendChild(dateEl);
+
+        const detail = document.createElement('div');
+        detail.className = 'log-detail';
+        detail.textContent = '時間: ' + log.start + ' 〜 ' + log.end + ' (実働 ' + log.workHours + 'h)';
+        if (log.memo) {
+          detail.appendChild(document.createElement('br'));
+          detail.appendChild(document.createTextNode('備考: ' + log.memo));
+        }
+        card.appendChild(detail);
+
+        container.appendChild(card);
+      });
+    }
+
+    // ---------- イベント登録 ----------
+    $('tabInputBtn').addEventListener('click', () => switchTab('inputTab'));
+    $('tabLogBtn').addEventListener('click', () => switchTab('logTab'));
+    $('reloadLogsBtn').addEventListener('click', fetchLogs);
+    $('reloginBtn').addEventListener('click', () => {
+      try { liff.logout(); } catch (e) { /* 無視 */ }
+      liff.login({ redirectUri: window.location.href });
+    });
+
+    init();
+  </script>
+</body>
+</html>
