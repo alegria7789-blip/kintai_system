@@ -12,20 +12,21 @@
     .container { max-width: 400px; margin: 0 auto; background: #fff; padding: 20px; border-radius: 12px; box-shadow: 0 2px 10px rgba(0,0,0,0.08); }
     h2 { margin: 0 0 12px; font-size: 18px; }
 
-    .notice { padding: 12px; border-radius: 8px; background: #f0f4ff; color: #334; font-size: 14px; line-height: 1.5; margin-bottom: 12px; }
+    .notice { padding: 12px; border-radius: 8px; background: #f0f4ff; color: #334; font-size: 14px; line-height: 1.5; margin-bottom: 12px; white-space: pre-line; }
     .notice.error { background: #fff0f0; color: #b00020; }
     .notice.ok { background: #effaf2; color: #146c2e; }
     .hint { font-size: 12px; color: #777; margin: 4px 0 0; line-height: 1.4; }
 
     .tab-header { display: flex; border-bottom: 2px solid #eee; margin-bottom: 20px; }
-    .tab-btn { flex: 1; padding: 12px; text-align: center; font-weight: bold; font-size: 14px; color: #888; background: none; border: none; cursor: pointer; border-bottom: 3px solid transparent; }
+    .tab-btn { flex: 1; padding: 12px 4px; text-align: center; font-weight: bold; font-size: 14px; color: #888; background: none; border: none; cursor: pointer; border-bottom: 3px solid transparent; }
     .tab-btn.active { color: #06C755; border-bottom-color: #06C755; }
     .tab-content { display: none; }
     .tab-content.active { display: block; }
+    .badge { display: inline-block; min-width: 18px; padding: 0 5px; border-radius: 9px; background: #e5484d; color: #fff; font-size: 11px; line-height: 18px; margin-left: 4px; }
 
     .form-group { margin-bottom: 14px; }
     label { display: block; font-weight: bold; margin-bottom: 4px; font-size: 13px; color: #444; }
-    input[type="text"], input[type="date"], input[type="time"], input[type="number"], textarea { width: 100%; padding: 10px; box-sizing: border-box; border: 1px solid #ccc; border-radius: 6px; font-size: 15px; font-family: inherit; }
+    input[type="text"], input[type="date"], input[type="time"], input[type="number"], input[type="month"], select, textarea { width: 100%; padding: 10px; box-sizing: border-box; border: 1px solid #ccc; border-radius: 6px; font-size: 15px; font-family: inherit; background: #fff; }
     textarea { resize: vertical; height: 50px; }
 
     .checkbox-group { display: flex; align-items: center; cursor: pointer; user-select: none; padding: 6px 0; }
@@ -33,8 +34,12 @@
     .checkbox-group label { margin-bottom: 0; cursor: pointer; font-size: 14px; color: #333; }
 
     .submit-btn { width: 100%; padding: 12px; background: #06C755; color: #fff; border: none; border-radius: 6px; font-size: 16px; font-weight: bold; cursor: pointer; margin-top: 10px; }
-    .submit-btn:disabled { background: #ccc; cursor: not-allowed; }
+    .submit-btn:disabled, .sub-btn:disabled { background: #ccc; cursor: not-allowed; }
     .sub-btn { width: 100%; padding: 10px; background: #555; color: #fff; border: none; border-radius: 6px; font-size: 14px; cursor: pointer; margin-bottom: 15px; }
+
+    .admin-box { background: #fafafa; border: 1px solid #eee; border-radius: 8px; padding: 12px; margin-bottom: 14px; }
+    .row2 { display: flex; gap: 8px; }
+    .row2 > .form-group { flex: 1; }
 
     .log-card { background: #f9f9f9; padding: 12px; border-radius: 8px; margin-bottom: 10px; font-size: 13px; border-left: 4px solid #06C755; box-shadow: 0 1px 3px rgba(0,0,0,0.05); }
     .log-date { font-weight: bold; color: #06C755; font-size: 14px; margin-bottom: 4px; }
@@ -67,10 +72,10 @@
       </form>
     </section>
 
-    <!-- 承認待ち -->
+    <!-- 承認待ち・退職 -->
     <section id="pendingView" hidden>
-      <h2>承認待ち</h2>
-      <div class="notice">登録は完了しています。管理者の承認が済むと、勤怠を入力できるようになります。</div>
+      <h2 id="pendingTitle">承認待ち</h2>
+      <div id="pendingText" class="notice">登録は完了しています。管理者の承認が済むと、勤怠を入力できるようになります。</div>
       <button type="button" id="recheckBtn" class="sub-btn">承認状況を確認する</button>
     </section>
 
@@ -78,12 +83,17 @@
     <section id="mainView" hidden>
       <div class="tab-header">
         <button type="button" class="tab-btn active" id="tabInputBtn">勤怠入力</button>
-        <button type="button" class="tab-btn" id="tabLogBtn">打刻ログ確認</button>
+        <button type="button" class="tab-btn" id="tabLogBtn">打刻ログ</button>
+        <button type="button" class="tab-btn" id="tabAdminBtn" hidden>店長<span id="pendingBadge" class="badge" hidden></span></button>
       </div>
+
+      <!-- 送信結果(どのタブでも見える) -->
+      <div id="toast" class="notice" hidden></div>
 
       <!-- 1. 勤怠入力 -->
       <div id="inputTab" class="tab-content active">
         <div id="staffLabel" class="hint" style="margin:-8px 0 12px; text-align:right;"></div>
+        <div id="editBanner" class="notice" hidden></div>
         <form id="attendanceForm" autocomplete="off">
           <div class="form-group">
             <label for="work_date">日付(出勤した日)</label>
@@ -131,10 +141,9 @@
             <textarea id="memo" maxlength="200" placeholder="遅刻理由や連絡事項など"></textarea>
           </div>
 
-          <div id="editBanner" class="notice" hidden></div>
           <div id="formMessage" class="notice" hidden></div>
           <button type="submit" id="submitBtn" class="submit-btn">送信する</button>
-          <button type="button" id="cancelEditBtn" class="sub-btn" style="margin-top:10px;" hidden>修正をやめる</button>
+          <button type="button" id="cancelEditBtn" class="sub-btn" style="margin-top:10px;" hidden>やめる</button>
         </form>
       </div>
 
@@ -142,6 +151,42 @@
       <div id="logTab" class="tab-content">
         <button type="button" class="sub-btn" id="reloadLogsBtn">最新ログを更新</button>
         <div id="logsContainer"></div>
+      </div>
+
+      <!-- 3. 店長モード -->
+      <div id="adminTab" class="tab-content">
+        <div class="form-group">
+          <label for="adminStaff">スタッフ</label>
+          <select id="adminStaff"></select>
+          <p id="pendingHint" class="hint"></p>
+        </div>
+
+        <div class="admin-box">
+          <div class="row2">
+            <div class="form-group">
+              <label for="adminStatus">状態</label>
+              <select id="adminStatus">
+                <option value="承認待ち">承認待ち</option>
+                <option value="在籍">在籍</option>
+                <option value="退職">退職</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label for="adminWage">基本時給(円)</label>
+              <input type="number" id="adminWage" min="0" step="1" inputmode="numeric">
+            </div>
+          </div>
+          <button type="button" id="adminSaveStaffBtn" class="sub-btn" style="margin:0;">状態・時給を保存</button>
+          <p class="hint">時給を変えると、これから入力する勤務から新しい時給になります。</p>
+        </div>
+
+        <div class="form-group">
+          <label for="adminMonth">月</label>
+          <input type="month" id="adminMonth">
+        </div>
+        <div id="adminSummary" class="hint" style="margin-bottom:10px;"></div>
+        <button type="button" id="adminAddBtn" class="submit-btn" style="margin:0 0 15px;">＋ このスタッフの勤務を代わりに入力</button>
+        <div id="adminLogs"></div>
       </div>
     </section>
 
@@ -161,9 +206,25 @@
 
     const $ = (id) => document.getElementById(id);
 
-    function configIsValid() {
-      if (CONFIG.LIFF_ID.indexOf('YOUR_') !== -1 || CONFIG.GAS_URL.indexOf('YOUR_') !== -1) return false;
-      return /^https:\/\/script\.google\.com\/(a\/[A-Za-z0-9.-]+\/)?macros\/s\/[A-Za-z0-9_-]+\/exec$/.test(CONFIG.GAS_URL);
+    // 貼り付けた時に入りがちな前後の空白・改行は取り除く
+    CONFIG.LIFF_ID = String(CONFIG.LIFF_ID || '').trim();
+    CONFIG.GAS_URL = String(CONFIG.GAS_URL || '').trim();
+
+    // 設定がおかしい時は、どこがおかしいかを返す(問題なければ空文字)
+    function configProblem() {
+      const id = CONFIG.LIFF_ID;
+      const url = CONFIG.GAS_URL;
+      if (!id || id.indexOf('YOUR_') !== -1) return 'LIFF_ID がまだ入っていません。';
+      if (/\s|https?:/.test(id)) return 'LIFF_ID の形が違います(URLではなく「1234567890-abcdEFGH」のようなIDだけを入れてください)。';
+      if (!url || url.indexOf('YOUR_') !== -1) return 'GAS_URL がまだ入っていません。';
+      if ((url.match(/https?:\/\//g) || []).length > 1) return 'GAS_URL にURLが2回入っています。URL全体を1回だけ入れてください。';
+      if (/\/dev(\?|$)/.test(url)) return 'GAS_URL が「/dev」で終わっています。デプロイ画面の「ウェブアプリのURL」(/exec で終わる方)を入れてください。';
+      if (!/\/exec(\?.*)?$/.test(url)) return 'GAS_URL が「/exec」で終わっていません。';
+      // 個人: /macros/s/ID/exec 、Google Workspace: /a/macros/ドメイン/s/ID/exec
+      if (!/^https:\/\/script\.google\.com\/(a\/macros\/[A-Za-z0-9.-]+|macros)\/s\/[A-Za-z0-9_-]+\/exec(\?.*)?$/.test(url)) {
+        return 'GAS_URL の形が違います。「https://script.google.com/macros/s/…/exec」の形か確認してください。';
+      }
+      return '';
     }
 
     // ---------- 表示切り替え ----------
@@ -186,13 +247,24 @@
       box.hidden = !text;
     }
 
-    function switchTab(tabId) {
-      const isInput = tabId === 'inputTab';
-      $('tabInputBtn').classList.toggle('active', isInput);
-      $('tabLogBtn').classList.toggle('active', !isInput);
-      $('inputTab').classList.toggle('active', isInput);
-      $('logTab').classList.toggle('active', !isInput);
-      if (!isInput) fetchLogs();
+    // 送信結果は、タブを切り替えても見える場所に出す
+    function showToast(text, kind) {
+      const box = $('toast');
+      box.textContent = text;
+      box.className = 'notice' + (kind ? ' ' + kind : '');
+      box.hidden = !text;
+    }
+
+    const TABS = { inputTab: 'tabInputBtn', logTab: 'tabLogBtn', adminTab: 'tabAdminBtn' };
+    function switchTab(tabId, opts) {
+      Object.keys(TABS).forEach((t) => {
+        $(TABS[t]).classList.toggle('active', t === tabId);
+        $(t).classList.toggle('active', t === tabId);
+      });
+      if (!(opts && opts.keepToast)) showToast('', '');
+      if (opts && opts.noFetch) return;
+      if (tabId === 'logTab') fetchLogs();
+      if (tabId === 'adminTab') loadAdminStaff();
     }
 
     // ---------- API ----------
@@ -213,18 +285,20 @@
     }
 
     // ---------- 初期化 ----------
+    function pad(n) { return String(n).padStart(2, '0'); }
     function todayLocal() {
       // toISOString() は世界標準時のため、日本時間の0〜9時に前日になる。端末の現地時間で作る
       const d = new Date();
-      const pad = (n) => String(n).padStart(2, '0');
       return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate());
     }
 
     async function init() {
       $('work_date').value = todayLocal();
+      $('adminMonth').value = todayLocal().substring(0, 7);
 
-      if (!configIsValid()) {
-        showError('設定エラー: このファイルの CONFIG に、LIFF ID と GAS の URL を設定してください。', false);
+      const problem = configProblem();
+      if (problem) {
+        showError('設定エラー: ' + problem + '(index.html の CONFIG を直してください)', false);
         return;
       }
 
@@ -247,6 +321,8 @@
       }
     }
 
+    let isAdmin = false;
+
     async function refreshStatus() {
       const data = await api('status');
       if (data.status !== 'success') {
@@ -260,14 +336,28 @@
       $('group_special1').hidden = !f.special1;
       $('group_special2').hidden = !f.special2;
 
+      isAdmin = !!data.isAdmin;
+      $('tabAdminBtn').hidden = !isAdmin;
+
       if (!data.registered) {
         showOnly('registerView');
-      } else if (!data.active) {
+      } else if (!data.active && !isAdmin) {
+        const retired = data.staffStatus === '退職';
+        $('pendingTitle').textContent = retired ? '退職済み' : '承認待ち';
+        $('pendingText').textContent = retired
+          ? '退職済みのため、勤怠は入力できません。記録の確認や修正は管理者に連絡してください。'
+          : '登録は完了しています。管理者の承認が済むと、勤怠を入力できるようになります。';
         showOnly('pendingView');
       } else {
         $('staffLabel').textContent = data.name ? (data.name + ' さん') : '';
         showOnly('mainView');
-        fetchLogs();
+        if (data.active) {
+          fetchLogs();
+          if (isAdmin) loadAdminStaff(); // 承認待ちの人数バッジを出すため
+        } else {
+          // 店長だけど本人は勤務入力しない場合は、店長タブから始める
+          switchTab('adminTab');
+        }
       }
     }
 
@@ -296,12 +386,23 @@
       try { await refreshStatus(); } catch (err) { /* 認証エラーは api() 側で表示済み */ }
     });
 
-    // ---------- 修正モード ----------
-    // editing = { date, start } のとき、送信は「修正」として扱う
+    // ---------- 入力フォームのモード ----------
+    // editing = null                                   … 自分の新しい勤務
+    // editing = { kind:'self', date, start }           … 自分の記録の修正
+    // editing = { kind:'admin', targetId, targetName } … 店長がスタッフの勤務を代わりに入力
+    // editing = { kind:'admin', targetId, targetName, date, start } … 店長がスタッフの記録を修正
     let editing = null;
 
-    function startEdit(log) {
-      editing = { date: log.date, start: log.start };
+    function resetForm() {
+      $('attendanceForm').reset();
+      $('work_date').value = todayLocal();
+      $('break_minutes').value = 0;
+      $('expense_amount').value = 0;
+      $('transport_cost').value = 0;
+      showFormMessage('', '');
+    }
+
+    function fillForm(log) {
       $('work_date').value = log.date;
       $('start_time').value = log.start;
       $('end_time').value = log.end;
@@ -311,41 +412,57 @@
       $('expense_amount').value = log.expense || 0;
       $('transport_cost').value = log.transport || 0;
       $('memo').value = log.memo || '';
-      $('editBanner').textContent = '✏️ ' + log.date + ' ' + log.start + ' の記録を修正中です。直して「修正を保存する」を押してください。';
-      $('editBanner').hidden = false;
-      $('submitBtn').textContent = '修正を保存する';
-      $('cancelEditBtn').hidden = false;
-      showFormMessage('', '');
+    }
+
+    function setMode(mode, bannerText, buttonText) {
+      editing = mode;
+      $('editBanner').textContent = bannerText || '';
+      $('editBanner').hidden = !bannerText;
+      $('submitBtn').textContent = buttonText;
+      $('cancelEditBtn').hidden = !mode;
+    }
+
+    function startSelfEdit(log) {
+      resetForm();
+      fillForm(log);
+      setMode({ kind: 'self', date: log.date, start: log.start },
+        '✏️ ' + log.date + ' ' + log.start + ' の記録を修正中です。直して「修正を保存する」を押してください。',
+        '修正を保存する');
+      switchTab('inputTab');
+    }
+
+    function startAdminAdd() {
+      const s = selectedStaff();
+      if (!s) return;
+      resetForm();
+      setMode({ kind: 'admin', targetId: s.id, targetName: s.name },
+        '👤 ' + s.name + ' さんの勤務を、代わりに入力しています。',
+        '代わりに登録する');
+      switchTab('inputTab');
+    }
+
+    function startAdminEdit(log) {
+      const s = selectedStaff();
+      if (!s) return;
+      resetForm();
+      fillForm(log);
+      setMode({ kind: 'admin', targetId: s.id, targetName: s.name, date: log.date, start: log.start },
+        '👤 ' + s.name + ' さんの ' + log.date + ' ' + log.start + ' の記録を修正しています。',
+        '修正を保存する');
       switchTab('inputTab');
     }
 
     function endEdit() {
-      editing = null;
-      $('editBanner').hidden = true;
-      $('submitBtn').textContent = '送信する';
-      $('cancelEditBtn').hidden = true;
-      $('attendanceForm').reset();
-      $('work_date').value = todayLocal();
-      $('break_minutes').value = 0;
-      $('expense_amount').value = 0;
-      $('transport_cost').value = 0;
+      const wasAdmin = editing && editing.kind === 'admin';
+      setMode(null, '', '送信する');
+      resetForm();
+      return wasAdmin;
     }
 
-    $('cancelEditBtn').addEventListener('click', endEdit);
-
-    async function deleteLog(log) {
-      if (!confirm(log.date + ' ' + log.start + ' 〜 ' + log.end + ' の記録を削除します。よろしいですか?')) return;
-      try {
-        const data = await api('delete', { work_date: log.date, start_time: log.start });
-        if (data.status === 'success') {
-          renderLogs(data.logs);
-        } else {
-          alert(data.message || '削除に失敗しました。');
-        }
-      } catch (err) {
-        if (!(err instanceof AuthError)) alert('通信エラーが発生しました。もう一度お試しください。');
-      }
-    }
+    $('cancelEditBtn').addEventListener('click', () => {
+      const wasAdmin = endEdit();
+      if (wasAdmin) switchTab('adminTab', { noFetch: true });
+    });
 
     // ---------- 勤怠送信 ----------
     $('attendanceForm').addEventListener('submit', async (e) => {
@@ -353,9 +470,10 @@
       showFormMessage('', '');
 
       const btn = $('submitBtn');
+      const btnText = btn.textContent;
       btn.disabled = true;
       btn.textContent = '送信中...';
-      const wasEditing = editing;
+      const mode = editing;
 
       // 金額・時間の計算はすべてサーバー側で行う。ここでは入力値をそのまま送る
       const payload = {
@@ -370,53 +488,199 @@
         memo: $('memo').value || ''
       };
 
-      try {
-        const data = wasEditing
-          ? await api('edit', Object.assign({ orig_date: wasEditing.date, orig_start: wasEditing.start }, payload))
-          : await api('submit', payload);
-        if (data.status === 'success') {
-          if (wasEditing) endEdit();
-          showFormMessage(data.message, 'ok');
-          renderLogs(data.logs);
-          switchTab('logTab');
+      let action = 'submit';
+      if (mode && mode.kind === 'self') {
+        action = 'edit';
+        Object.assign(payload, { orig_date: mode.date, orig_start: mode.start });
+      } else if (mode && mode.kind === 'admin') {
+        payload.target_id = mode.targetId;
+        if (mode.date) {
+          action = 'admin_edit';
+          Object.assign(payload, { orig_date: mode.date, orig_start: mode.start });
         } else {
+          action = 'admin_submit';
+        }
+      }
+
+      try {
+        const data = await api(action, payload);
+        if (data.status === 'success') {
+          endEdit(); // 送信できたら入力欄を空にする(前の内容で上書きしてしまうのを防ぐ)
+          if (mode && mode.kind === 'admin') {
+            $('adminMonth').value = payload.work_date.substring(0, 7);
+            switchTab('adminTab', { noFetch: true });
+            showToast(data.message, 'ok');
+            loadAdminLogs();
+          } else {
+            switchTab('logTab', { noFetch: true });
+            showToast(data.message, 'ok');
+            renderLogs($('logsContainer'), data.logs, { onEdit: startSelfEdit, onDelete: deleteOwnLog, admin: false });
+          }
+        } else {
+          btn.textContent = btnText;
           showFormMessage(data.message || '送信に失敗しました。', 'error');
         }
       } catch (err) {
+        btn.textContent = btnText;
         if (!(err instanceof AuthError)) showFormMessage('通信エラーが発生しました。もう一度お試しください。', 'error');
       } finally {
         btn.disabled = false;
-        btn.textContent = editing ? '修正を保存する' : '送信する';
       }
     });
 
-    // ---------- ログ ----------
+    // ---------- 自分のログ ----------
     async function fetchLogs() {
       try {
         const data = await api('get_logs');
-        if (data.status === 'success') renderLogs(data.logs);
+        if (data.status === 'success') {
+          renderLogs($('logsContainer'), data.logs, { onEdit: startSelfEdit, onDelete: deleteOwnLog, admin: false });
+        }
       } catch (err) {
         if (err instanceof AuthError) return;
-        const container = $('logsContainer');
-        container.textContent = '';
-        const div = document.createElement('div');
-        div.className = 'empty';
-        div.style.color = 'red';
-        div.textContent = 'ログの取得に失敗しました';
-        container.appendChild(div);
+        renderMessage($('logsContainer'), 'ログの取得に失敗しました', true);
       }
     }
 
-    // 画面に出す文字は textContent だけで組み立てる(HTMLとして解釈させない)
-    function renderLogs(logs) {
-      const container = $('logsContainer');
-      container.textContent = '';
+    async function deleteOwnLog(log) {
+      if (!confirm(log.date + ' ' + log.start + ' 〜 ' + log.end + ' の記録を削除します。よろしいですか?')) return;
+      try {
+        const data = await api('delete', { work_date: log.date, start_time: log.start });
+        if (data.status === 'success') {
+          showToast(data.message, 'ok');
+          renderLogs($('logsContainer'), data.logs, { onEdit: startSelfEdit, onDelete: deleteOwnLog, admin: false });
+        } else {
+          alert(data.message || '削除に失敗しました。');
+        }
+      } catch (err) {
+        if (!(err instanceof AuthError)) alert('通信エラーが発生しました。もう一度お試しください。');
+      }
+    }
 
+    // ---------- 店長モード ----------
+    let staffList = [];
+
+    function selectedStaff() {
+      const id = $('adminStaff').value;
+      return staffList.find((s) => s.id === id) || null;
+    }
+
+    async function loadAdminStaff() {
+      if (!isAdmin) return;
+      try {
+        const data = await api('admin_staff_list');
+        if (data.status !== 'success') {
+          renderMessage($('adminLogs'), data.message || 'スタッフ一覧の取得に失敗しました', true);
+          return;
+        }
+        const keep = $('adminStaff').value;
+        staffList = data.staff || [];
+        const sel = $('adminStaff');
+        sel.textContent = '';
+        staffList.forEach((s) => {
+          const opt = document.createElement('option');
+          opt.value = s.id;
+          opt.textContent = s.name + '（' + s.status + '）';
+          sel.appendChild(opt);
+        });
+        if (keep && staffList.some((s) => s.id === keep)) sel.value = keep;
+
+        const pending = staffList.filter((s) => s.status === '承認待ち').length;
+        $('pendingBadge').textContent = pending;
+        $('pendingBadge').hidden = pending === 0;
+        $('pendingHint').textContent = pending > 0
+          ? '承認待ちが ' + pending + ' 人います。状態を「在籍」にして、時給を確認してください。'
+          : '';
+        onStaffChange();
+      } catch (err) {
+        if (!(err instanceof AuthError)) renderMessage($('adminLogs'), 'スタッフ一覧の取得に失敗しました', true);
+      }
+    }
+
+    function onStaffChange() {
+      const s = selectedStaff();
+      $('adminStatus').value = s ? s.status : '承認待ち';
+      $('adminWage').value = s ? s.wage : '';
+      $('adminAddBtn').disabled = !s || s.status === '承認待ち';
+      if (!s) {
+        $('adminSummary').textContent = '';
+        renderMessage($('adminLogs'), 'スタッフがまだいません', false);
+        return;
+      }
+      loadAdminLogs();
+    }
+
+    async function loadAdminLogs() {
+      const s = selectedStaff();
+      const month = $('adminMonth').value;
+      if (!s || !month) return;
+      try {
+        const data = await api('admin_get_logs', { target_id: s.id, month: month });
+        if (data.status !== 'success') {
+          renderMessage($('adminLogs'), data.message || '記録の取得に失敗しました', true);
+          return;
+        }
+        const sum = data.summary || { days: 0, hours: 0 };
+        $('adminSummary').textContent = month + '：出勤 ' + sum.days + '日 ／ 実働 ' + sum.hours + '時間';
+        renderLogs($('adminLogs'), data.logs, { onEdit: startAdminEdit, onDelete: deleteAdminLog, admin: true });
+      } catch (err) {
+        if (!(err instanceof AuthError)) renderMessage($('adminLogs'), '記録の取得に失敗しました', true);
+      }
+    }
+
+    async function deleteAdminLog(log) {
+      const s = selectedStaff();
+      if (!s) return;
+      if (!confirm(s.name + ' さんの ' + log.date + ' ' + log.start + ' 〜 ' + log.end + ' の記録を削除します。よろしいですか?')) return;
+      try {
+        const data = await api('admin_delete', { target_id: s.id, work_date: log.date, start_time: log.start });
+        if (data.status === 'success') {
+          showToast(data.message, 'ok');
+          loadAdminLogs();
+        } else {
+          alert(data.message || '削除に失敗しました。');
+        }
+      } catch (err) {
+        if (!(err instanceof AuthError)) alert('通信エラーが発生しました。もう一度お試しください。');
+      }
+    }
+
+    $('adminSaveStaffBtn').addEventListener('click', async () => {
+      const s = selectedStaff();
+      if (!s) return;
+      const wage = Number($('adminWage').value);
+      if (!Number.isInteger(wage) || wage < 0) { alert('時給は0以上の整数で入力してください。'); return; }
+      const btn = $('adminSaveStaffBtn');
+      btn.disabled = true;
+      try {
+        const data = await api('admin_update_staff', { target_id: s.id, staff_status: $('adminStatus').value, wage: wage });
+        if (data.status === 'success') {
+          showToast(data.message, 'ok');
+          await loadAdminStaff();
+        } else {
+          alert(data.message || '保存に失敗しました。');
+        }
+      } catch (err) {
+        if (!(err instanceof AuthError)) alert('通信エラーが発生しました。もう一度お試しください。');
+      } finally {
+        btn.disabled = false;
+      }
+    });
+
+    // ---------- ログの表示(本人・店長で共通) ----------
+    function renderMessage(container, text, isError) {
+      container.textContent = '';
+      const div = document.createElement('div');
+      div.className = 'empty';
+      if (isError) div.style.color = 'red';
+      div.textContent = text;
+      container.appendChild(div);
+    }
+
+    // 画面に出す文字は textContent だけで組み立てる(HTMLとして解釈させない)
+    function renderLogs(container, logs, handlers) {
+      container.textContent = '';
       if (!logs || logs.length === 0) {
-        const div = document.createElement('div');
-        div.className = 'empty';
-        div.textContent = '打刻履歴はありません';
-        container.appendChild(div);
+        renderMessage(container, '打刻履歴はありません', false);
         return;
       }
 
@@ -426,12 +690,16 @@
 
         const dateEl = document.createElement('div');
         dateEl.className = 'log-date';
-        dateEl.textContent = '📅 ' + log.date;
+        dateEl.textContent = '📅 ' + log.date + (log.by && log.by.indexOf('店長') === 0 ? '（' + log.by + '）' : '');
         card.appendChild(dateEl);
 
         const detail = document.createElement('div');
         detail.className = 'log-detail';
-        detail.textContent = '時間: ' + log.start + ' 〜 ' + log.end + ' (実働 ' + log.workHours + 'h)';
+        let text = '時間: ' + log.start + ' 〜 ' + log.end + ' (実働 ' + log.workHours + 'h';
+        if (log.breakMinutes) text += '・休憩 ' + log.breakMinutes + '分';
+        if (log.overHours) text += '・残業 ' + log.overHours + 'h';
+        text += ')';
+        detail.textContent = text;
         if (log.memo) {
           detail.appendChild(document.createElement('br'));
           detail.appendChild(document.createTextNode('備考: ' + log.memo));
@@ -444,19 +712,21 @@
           const editBtn = document.createElement('button');
           editBtn.type = 'button';
           editBtn.textContent = '修正';
-          editBtn.addEventListener('click', () => startEdit(log));
+          editBtn.addEventListener('click', () => handlers.onEdit(log));
           const delBtn = document.createElement('button');
           delBtn.type = 'button';
           delBtn.className = 'danger';
           delBtn.textContent = '削除';
-          delBtn.addEventListener('click', () => deleteLog(log));
+          delBtn.addEventListener('click', () => handlers.onDelete(log));
           actions.appendChild(editBtn);
           actions.appendChild(delBtn);
           card.appendChild(actions);
         } else {
           const lock = document.createElement('div');
           lock.className = 'hint';
-          lock.textContent = '🔒 修正できる期間を過ぎています。直す場合は管理者に連絡してください。';
+          lock.textContent = handlers.admin
+            ? '🔒 古すぎる記録のため、スプレッドシートで直接直してください。'
+            : '🔒 修正できる期間を過ぎています。直す場合は管理者に連絡してください。';
           card.appendChild(lock);
         }
 
@@ -467,7 +737,11 @@
     // ---------- イベント登録 ----------
     $('tabInputBtn').addEventListener('click', () => switchTab('inputTab'));
     $('tabLogBtn').addEventListener('click', () => switchTab('logTab'));
+    $('tabAdminBtn').addEventListener('click', () => switchTab('adminTab'));
     $('reloadLogsBtn').addEventListener('click', fetchLogs);
+    $('adminStaff').addEventListener('change', onStaffChange);
+    $('adminMonth').addEventListener('change', loadAdminLogs);
+    $('adminAddBtn').addEventListener('click', startAdminAdd);
     $('reloginBtn').addEventListener('click', () => {
       try { liff.logout(); } catch (e) { /* 無視 */ }
       liff.login({ redirectUri: window.location.href });
